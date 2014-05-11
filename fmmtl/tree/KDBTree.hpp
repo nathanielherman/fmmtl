@@ -185,10 +185,11 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
     return (*median)[p.splittingDomain];
   }
 
-  void split_pp(PointPage p,  RegionPage *right_parent, unsigned dim, double split_pt) {
+  void split_pp(PointPage &p,  RegionPage *right_parent, unsigned dim, double split_pt) {
     // create new right page, the old page will be left
     pointPages.emplace_back();
     PointPage &new_p = pointPages.back();
+    std::cout << "size of new_p" << new_p.points.size() << std::endl;
     // new points for p
     std::vector<point_type> ppoints;
 
