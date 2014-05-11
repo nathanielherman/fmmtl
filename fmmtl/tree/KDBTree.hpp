@@ -127,7 +127,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
     return (*median).box.min()[p.splittingDomain];
   }
 
-   void split_rp(RegionPage& p,  Page *right_parent = p.parent) {     
+  void split_rp(RegionPage& p,  Page *right_parent, unsigned dim, double split_pt) {
      regionPages.emplace_back();
      RegionPage& right_page = regionPages.back();
      
@@ -156,7 +156,6 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
        } else if (right_box.contains(region.box)/*region.box.min()[dim] >= split_pt*/) { // fully right of split
          right_page.children.push_back(region);
        } else { // middle of split
-         //TODO: refactor split to take dim and splitpt
          split(region.page, &right_page, dim, split_pt);
        }
      }
@@ -174,14 +173,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
     return (*median)[p.splittingDomain];
   }
 
-   void split_pp(PointPage p,  Page *right_parent = p.parent) {
-    // median of key_i
-    std::nth_element (p.points.begin(), p.points.end(), 
-      [] (point_type p1, point_type p2) { 
-        return p1[p.splittingDomain] < p2[p.splittingDomain];
-      });
-    point_type median = p.points[p.points.size() / 2];
-
+  void split_pp(PointPage p,  Page *right_parent, unsigned dim, double split_pt) {
     // create new right page, the old page will be left
     pointPages_.emplace_back();
     PointPage &new_p = pointPages.back();
@@ -194,7 +186,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
 
     // reassign the points of the original region
     for (auto&& pnt: p.points) {
-      if (pnt[p.splittingDomain] < median) {
+      if (pnt[dim] < split_pt) {
         ppoints.push_back(pnt);
         rt_p.box |= pnt; //
       }
@@ -205,7 +197,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
     }
     // update p's points and the splittingDomain
     p.points = ppoints;
-    p.splittingDomain = (p.splittingDomain + 1) % n_crit_point_;
+    p.splittingDomain = (p.splittingDomain + 1) % DIM;
     new_p.splittingDomain = p.splittingDomain;
     
     // update parent to hold new bounding_box
@@ -258,7 +250,9 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
   /** Returns true iff @a p is in the tree.
    * @param[out] page will be set to the PointPage that either contains or would contain @a p
    */
-  bool query(point_type p, PointPage& pointpage, Page *head = root) {
+  bool query(point_type p, PointPage& pointpage, Page *head = NULL) {
+    if (!head)
+      head = root;
     // we reached the leaf
     if (!head->isRegionPage) {
       pointpage = head;
