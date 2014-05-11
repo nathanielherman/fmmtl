@@ -19,7 +19,7 @@ int main(int argc, char** argv)
   for (int k = 0; k < N; ++k)
     points[k] = fmmtl::random<point_type>::get();
 
-  NDBTree<3> tree(points.begin(), points.end());
+  NDBTree<3> tree(points.begin(), points.end(), 4, 4);
 
   tree.print();
 }

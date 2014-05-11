@@ -140,6 +140,9 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
      std::vector<region_type> old_left_regions = p.children;
      // clear the vector so we can add only regions that aren't going into right_page
      p.children = std::vector<region_type>();
+
+     // ensure we have a parent (e.g. if we're currently the root)
+     create_parent(&p);
      
      auto cur_box = p.parent->children[p.pidx].box;
      point_type left_max = cur_box.max();
@@ -153,7 +156,10 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
      
      auto rt1 = region_type{left_box, &p};
      update_parent(rt1);
-     
+     if (!right_parent)
+       right_parent = p.parent;
+     assert(right_parent);
+
      for (auto&& region : old_left_regions) {
        if (left_box.contains(region.box)/*region.box.max()[dim] <= split_pt*/) { // fully left of split
          p.children.push_back(region);
@@ -208,22 +214,27 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
     
     // update parent to hold new bounding_box
     update_parent(rt_p);
+    if (!right_parent)
+      right_parent = p.parent;
+    assert(right_parent);
     push_page(right_parent, rt_np);
    } 
    
    void update_parent(region_type &rt) {
-      if (rt.page->parent != NULL) {
-         rt.page->parent->children[rt.page->pidx].box = rt.box;
-      }
-      else { // a parent does not exist so create one
-        regionPages.emplace_back();
-        RegionPage &parent = regionPages.back();
-        parent.children.push_back(rt);
-        rt.page->parent = &parent;
-        rt.page->pidx = 0;
-        root = &parent;
-      }
+     assert(rt.page->parent != NULL);
+     rt.page->parent->children[rt.page->pidx].box = rt.box;
    }
+
+  void create_parent(Page *page) {
+    if (page->parent)
+      return;
+    regionPages.emplace_back();
+    RegionPage &parent = regionPages.back();
+    parent.children.push_back(region_type{rootBox, page});
+    page->parent = &parent;
+    page->pidx = 0;
+    root = &parent;
+  }
         
    void push_page(RegionPage *parent, region_type &rt) {
     parent->children.push_back(rt);
@@ -239,9 +250,6 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
    */
 
   void split(Page &p, RegionPage *right_parent = NULL) {
-    if (!right_parent) {
-      right_parent = p.parent;
-    }
     double split_pt = p.isRegionPage ? 
     calcRegionSplit((dynamic_cast<RegionPage&> (p))) : calcPointSplit((dynamic_cast<PointPage&> (p)));
     split(p, right_parent, p.splittingDomain, split_pt);
@@ -284,6 +292,8 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
   }
   
   Page *root;
+
+  BoundingBox<DIM> rootBox;
   
   std::vector<PointPage> pointPages;
   std::vector<RegionPage> regionPages;
