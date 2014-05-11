@@ -11,6 +11,7 @@ EXEC += test_expansion
 
 EXEC += test_p2p
 EXEC += test_tree
+EXEC += test_kdbtree
 EXEC += test_direct
 EXEC += test_vec
 
