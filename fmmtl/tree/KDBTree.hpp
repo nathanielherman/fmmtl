@@ -35,11 +35,13 @@ struct Page {
     Page *parent;
 };
 
+struct region_type {
+  BoundingBox<DIM> box;
+  Page *page;
+};
+
 struct RegionPage : Page {
-    struct region_type {
-      BoundingBox<DIM> box;
-      Page *page;
-    };
+
     
     std::vector<region_type> children;
     RegionPage() : isRegionPage(true), splittingDomain(0), pidx(0), parent(NULL), children() {}
@@ -52,7 +54,7 @@ struct PointPage : Page {
 };
 
 
-static constexpr unsigned n_crit_region = CACHE_SZ / (sizeof(RegionPage::region_type));
+static constexpr unsigned n_crit_region = CACHE_SZ / (sizeof(region_type));
 static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
 
   unsigned n_crit_region_;
@@ -181,8 +183,8 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
     std::vector<point_type> ppoints;
 
     // init new region_types
-    RegionPage::region_type rt_p = {.box = BoundingBox(), .page = p};
-    RegionPage::region_type rt_np = {.box = BoundingBox(), .page = &new_page};
+    region_type rt_p = {.box = BoundingBox(), .page = p};
+    region_type rt_np = {.box = BoundingBox(), .page = &new_page};
 
     // reassign the points of the original region
     for (auto&& pnt: p.points) {
@@ -273,7 +275,6 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
     }
   }
   
-
   Page *root;
   
   std::vector<PointPage> pointPages;
