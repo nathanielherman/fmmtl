@@ -257,7 +257,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
   /** Returns true iff @a p is in the tree.
    * @param[out] page will be set to the PointPage that either contains or would contain @a p
    */
-  bool query(point_type p, PointPage *pointpage, Page *head = NULL) {
+  bool query(point_type p, PointPage *&pointpage, Page *head = NULL) {
     if (!head)
       head = root;
     // we reached the leaf
