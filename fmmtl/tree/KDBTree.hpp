@@ -27,14 +27,16 @@ struct NDBTree {
 typedef Vec<DIM,double> point_type;
 typedef BoundingBox<DIM> bounding_box_type;
 
-
+struct RegionPage;
 struct Page {
     bool isRegionPage;
     uint8_t splittingDomain;
     uint16_t pidx;
-    Page *parent;
+    RegionPage *parent;
 
   Page() : isRegionPage(false), splittingDomain(0), pidx(0), parent(NULL) {}
+
+  virtual ~Page() {}
 };
 
 struct region_type {
@@ -43,8 +45,8 @@ struct region_type {
 };
 
 struct RegionPage : public Page {
-  std::vector<region_type> children;
-  RegionPage() : Page(), children() { this->isRegionPage = true; }
+    std::vector<region_type> children;
+    RegionPage() : Page(), children() { this->isRegionPage = true; }
 };
 
 struct PointPage : public Page {
@@ -58,17 +60,17 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
 
   unsigned n_crit_region_;
   unsigned n_crit_point_;
-  MortonCoder<DIM> coder_;
+  // MortonCoder<DIM> coder_;
 
   template <typename PointIter>
   NDBTree(PointIter first, PointIter last, unsigned ncr_usr = n_crit_region, unsigned ncp_usr = n_crit_point)
-      : coder_(get_boundingbox(first, last)), n_crit_region_(ncr_usr), n_crit_point_(ncp_usr) {
+      : n_crit_region_(ncr_usr), n_crit_point_(ncp_usr) {
 
     // create empty root page
     pointPages.emplace_back();
     root = &pointPages[0];
     
-    insert_range(first, last, n_crit_point_usr, n_crit_point_region_usr);
+    insert_range(first, last);
   }
   
    void print() {
@@ -80,9 +82,6 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
         std::cout << std::endl;
       }
   }
-  
-  
-  
   
   private:
   
@@ -104,10 +103,12 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
     // we create the root in the constructor
     assert(root != NULL);
     
-    PointPage page;
-    if (query(p, page)) {
+    PointPage *pagep;
+    if (query(p, pagep)) {
       return false;
     }
+
+    PointPage& page = *pagep;
     
     page.points.push_back(p);
     
@@ -120,15 +121,16 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
     return true;
   }
 
-  double calcRegionSplit(const RegionPage& p) {
+  double calcRegionSplit(RegionPage& p) {
     auto& regions = p.children;
     auto median = regions.begin() + regions.size()/2;
+    auto dim = p.splittingDomain;
     std::nth_element(regions.begin(), median, regions.end(), 
-                     [] (region_type r1, region_type r2) { return r1.box.min()[p.splittingDomain] < r2.box.min()[p.splittingDomain]; });
+                     [=] (const region_type r1, const region_type r2) { return r1.box.min()[dim] < r2.box.min()[dim]; });
     return (*median).box.min()[p.splittingDomain];
   }
 
-  void split_rp(RegionPage& p,  Page *right_parent, unsigned dim, double split_pt) {
+  void split_rp(RegionPage& p,  RegionPage *right_parent, unsigned dim, double split_pt) {
      regionPages.emplace_back();
      RegionPage& right_page = regionPages.back();
      
@@ -149,7 +151,8 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
      BoundingBox<DIM> left_box(cur_box.min(), left_max);
      BoundingBox<DIM> right_box(right_min, cur_box.max());
      
-     update_parent(region_type{left_box, &p});
+     auto rt1 = region_type{left_box, &p};
+     update_parent(rt1);
      
      for (auto&& region : old_left_regions) {
        if (left_box.contains(region.box)/*region.box.max()[dim] <= split_pt*/) { // fully left of split
@@ -157,33 +160,35 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
        } else if (right_box.contains(region.box)/*region.box.min()[dim] >= split_pt*/) { // fully right of split
          right_page.children.push_back(region);
        } else { // middle of split
-         split(region.page, &right_page, dim, split_pt);
+         split(*region.page, &right_page, dim, split_pt);
        }
      }
      p.parent->children[p.pidx].box = left_box;
-     push_page(region_type{right_box, &right_page}, p->parent);
+     auto rt2 = region_type{right_box, &right_page};
+     push_page(right_parent, rt2);
    }
 
-   double calcPointSplit(const PointPage& p) {
+   double calcPointSplit(PointPage& p) {
     auto median = p.points.begin() + p.points.size()/2;
+    auto dim = p.splittingDomain;
     // median of key_i
     std::nth_element (p.points.begin(), median, p.points.end(),
-                      [] (point_type p1, point_type p2) {
-                        return p1[p.splittingDomain] < p2[p.splittingDomain];
+                      [=] (const point_type& p1, const point_type& p2) {
+                        return p1[dim] < p2[dim];
                       });
     return (*median)[p.splittingDomain];
   }
 
-  void split_pp(PointPage p,  Page *right_parent, unsigned dim, double split_pt) {
+  void split_pp(PointPage p,  RegionPage *right_parent, unsigned dim, double split_pt) {
     // create new right page, the old page will be left
-    pointPages_.emplace_back();
+    pointPages.emplace_back();
     PointPage &new_p = pointPages.back();
     // new points for p
     std::vector<point_type> ppoints;
 
     // init new region_types
-    region_type rt_p = {.box = BoundingBox(), .page = p};
-    region_type rt_np = {.box = BoundingBox(), .page = &new_page};
+    region_type rt_p = {.box = BoundingBox<DIM>(), .page = &p};
+    region_type rt_np = {.box = BoundingBox<DIM>(), .page = &new_p};
 
     // reassign the points of the original region
     for (auto&& pnt: p.points) {
@@ -203,19 +208,19 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
     
     // update parent to hold new bounding_box
     update_parent(rt_p);
-    return push_page(p->parent, rt_np);
+    push_page(right_parent, rt_np);
    } 
    
    void update_parent(region_type &rt) {
-      if (rt.p->parent != NULL) {
-         p.parent->children[p.pid].box = rt.box;
+      if (rt.page->parent != NULL) {
+         rt.page->parent->children[rt.page->pidx].box = rt.box;
       }
       else { // a parent does not exist so create one
-        regionPages_.emplace_back();
+        regionPages.emplace_back();
         RegionPage &parent = regionPages.back();
         parent.children.push_back(rt);
-        rt.p->parent = parent;
-        rt.p->pid = 0;
+        rt.page->parent = &parent;
+        rt.page->pidx = 0;
         root = &parent;
       }
    }
@@ -223,7 +228,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
    void push_page(RegionPage *parent, region_type &rt) {
     parent->children.push_back(rt);
     rt.page->parent = parent;
-    rt.page->pid = parent->children.size() - 1;
+    rt.page->pidx = parent->children.size() - 1;
     if (parent->children.size() == n_crit_region_) {
       split(*parent);
     }
@@ -233,33 +238,34 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
    * @pre left parent is p.parent
    */
 
-  void split(Page &p, Page *right_parent = NULL) {
+  void split(Page &p, RegionPage *right_parent = NULL) {
     if (!right_parent) {
       right_parent = p.parent;
     }
-    double split_pt = p.isRegionPage ? calcRegionSplit(p) : calcPointSplit(p);
+    double split_pt = p.isRegionPage ? 
+    calcRegionSplit((dynamic_cast<RegionPage&> (p))) : calcPointSplit((dynamic_cast<PointPage&> (p)));
     split(p, right_parent, p.splittingDomain, split_pt);
   }
 
-  void split(Page &p, Page *right_parent, unsigned dim, double split_pt) {
+  void split(Page &p, RegionPage *right_parent, unsigned dim, double split_pt) {
       if (p.isRegionPage)
-        split_rp(p, right_parent, dim, split_pt);
+        split_rp(((dynamic_cast<RegionPage&> (p))), right_parent, dim, split_pt);
       else
-        split_pp(p, right_parent, dim, split_pt);
+        split_pp(((dynamic_cast<PointPage&> (p))), right_parent, dim, split_pt);
   }
   
   /** Returns true iff @a p is in the tree.
    * @param[out] page will be set to the PointPage that either contains or would contain @a p
    */
-  bool query(point_type p, PointPage& pointpage, Page *head = NULL) {
+  bool query(point_type p, PointPage *pointpage, Page *head = NULL) {
     if (!head)
       head = root;
     // we reached the leaf
     if (!head->isRegionPage) {
-      pointpage = head;
+      pointpage = (dynamic_cast<PointPage *> (head));
       // TODO: we could speed this up slightly if we just ignored/assumed no duplicate points
       // (by not doing this for loop)
-      for (auto&& point : pointpage.points) {
+      for (auto&& point : pointpage->points) {
           if (point == p) {
               return true;
           }
@@ -267,11 +273,14 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
       return false;
     }
   
-    for (auto&& region : head->children) {
+    RegionPage &rp = *(dynamic_cast<RegionPage *> (head));
+    for (auto&& region : rp.children) {
       if (region.box.contains(p)) {
         return query(p, pointpage, region.page);
       }
     }
+    assert(0);
+    return false;
   }
   
   Page *root;
