@@ -22,7 +22,7 @@ UNAME := $(shell uname)
 
 # Define the C++ compiler to use
 CXX := $(shell which g++) -std=gnu++0x -fPIC
-# Check the version number of CXX
+# Check the version number of CXXco
 CXX_VERSION_LT_47 := $(shell expr `$(CXX) -dumpversion | cut -f1,2 -d.` \< 4.7)
 ifeq ($(CXX_VERSION_LT_47),1)
   $(error Makefile using g++ v$(shell $(CXX) -dumpversion), please use >= v4.7)

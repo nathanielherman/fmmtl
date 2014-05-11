@@ -75,9 +75,9 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
   
    void print() {
       for (auto&& p: pointPages) {
-        std::cout << "Point Page \n";
+        std::cout << "Point Page with bounding box" << std::endl;
         for (auto&& point: p.points) {
-          std::cout << point << ", ";
+          std::cout << point << std::endl;
         }
         std::cout << std::endl;
       }
@@ -193,30 +193,41 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
     std::vector<point_type> ppoints;
 
     // init new region_types
-    region_type rt_p = {.box = BoundingBox<DIM>(), .page = &p};
-    region_type rt_np = {.box = BoundingBox<DIM>(), .page = &new_p};
+    create_parent(&p);
+    auto cur_box = p.parent->children[p.pidx].box;
+    point_type left_max = cur_box.max();
+    // box ends at split_pt in the dim dimension
+    left_max[dim] = split_pt;
+    point_type right_min = cur_box.min();
+    // box begins at split_pt in the dim dimension
+    right_min[dim] = split_pt;
+    BoundingBox<DIM> left_box(cur_box.min(), left_max);
+    BoundingBox<DIM> right_box(right_min, cur_box.max());
 
     // reassign the points of the original region
     for (auto&& pnt: p.points) {
-      if (pnt[dim] < split_pt) {
+      if (pnt[dim] < split_pt)
         ppoints.push_back(pnt);
-        rt_p.box |= pnt; //
-      }
-      else {
+      else
         new_p.points.push_back(pnt);
-        rt_np.box |= pnt;
-      }
     }
+
     // update p's points and the splittingDomain
     p.points = ppoints;
     p.splittingDomain = (p.splittingDomain + 1) % DIM;
     new_p.splittingDomain = p.splittingDomain;
     
     // update parent to hold new bounding_box
+    region_type rt_p = region_type{left_box, &p}; 
+    
     update_parent(rt_p);
+
     if (!right_parent)
       right_parent = p.parent;
     assert(right_parent);
+
+    region_type rt_np = region_type{right_box, &new_p};
+
     push_page(right_parent, rt_np);
    } 
    
