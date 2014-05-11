@@ -33,6 +33,8 @@ struct Page {
     uint8_t splittingDomain;
     uint16_t pidx;
     Page *parent;
+
+  Page() : isRegionPage(false), splittingDomain(0), pidx(0), parent(NULL) {}
 };
 
 struct region_type {
@@ -40,17 +42,14 @@ struct region_type {
   Page *page;
 };
 
-struct RegionPage : Page {
-
-    
-    std::vector<region_type> children;
-    RegionPage() : isRegionPage(true), splittingDomain(0), pidx(0), parent(NULL), children() {}
-
+struct RegionPage : public Page {
+  std::vector<region_type> children;
+  RegionPage() : Page(), children() { this->isRegionPage = true; }
 };
 
-struct PointPage : Page {
-    std::vector<point_type> points;
-    PointPage() : isRegionPage(false), splittingDomain(0), pidx(0), parent(NULL), points() {}
+struct PointPage : public Page {
+  std::vector<point_type> points;
+  PointPage() : Page(), points() { this->isRegionPage = false; }
 };
 
 
