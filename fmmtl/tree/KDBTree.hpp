@@ -35,11 +35,13 @@ struct Page {
     Page *parent;
 };
 
+struct region_type {
+  BoundingBox<DIM> box;
+  Page *page;
+};
+
 struct RegionPage : Page {
-    struct region_type {
-      BoundingBox<DIM> box;
-      Page *page;
-    };
+
     
     std::vector<region_type> children;
     RegionPage() : isRegionPage(true), splittingDomain(0), pidx(0), parent(NULL), children() {}
@@ -52,7 +54,7 @@ struct PointPage : Page {
 };
 
 
-static constexpr unsigned n_crit_region = CACHE_SZ / (sizeof(RegionPage::region_type));
+static constexpr unsigned n_crit_region = CACHE_SZ / (sizeof(region_type));
 static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
 
   unsigned n_crit_region_;
@@ -119,15 +121,15 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
     return true;
   }
 
+  double calcRegionSplit(const RegionPage& p) {
+    auto& regions = p.children;
+    auto median = regions.begin() + regions.size()/2;
+    std::nth_element(regions.begin(), median, regions.end(), 
+                     [] (region_type r1, region_type r2) { return r1.box.min()[p.splittingDomain] < r2.box.min()[p.splittingDomain]; });
+    return (*median).box.min()[p.splittingDomain];
+  }
+
    void split_rp(RegionPage& p,  Page *right_parent = p.parent) {     
-     auto dim = p.splittingDomain;
-     auto& regions = p.children;
-     auto median = regions.begin() + regions.size()/2;
-     std::nth_element(regions.begin(), median, regions.end(), 
-     [] (region_type r1, region_type r2) { return r1.box.min()[dim] < r2.box.min()[dim]; });
-     
-     auto split_pt = (*median).box.min()[dim];
-     
      regionPages.emplace_back();
      RegionPage& right_page = regionPages.back();
      
@@ -164,6 +166,15 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
      push_page(region_type{right_box, &right_page}, p->parent);
    }
 
+   double calcPointSplit(const PointPage& p) {
+    auto median = p.points.begin() + p.points.size()/2;
+    // median of key_i
+    std::nth_element (p.points.begin(), median, p.points.end(),
+                      [] (point_type p1, point_type p2) {
+                        return p1[p.splittingDomain] < p2[p.splittingDomain];
+                      });
+    return (*median)[p.splittingDomain];
+  }
 
    void split_pp(PointPage p,  Page *right_parent = p.parent) {
     // median of key_i
@@ -180,8 +191,8 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
     std::vector<point_type> ppoints;
 
     // init new region_types
-    RegionPage::region_type rt_p = {.box = BoundingBox(), .page = p};
-    RegionPage::region_type rt_np = {.box = BoundingBox(), .page = &new_page};
+    region_type rt_p = {.box = BoundingBox(), .page = p};
+    region_type rt_np = {.box = BoundingBox(), .page = &new_page};
 
     // reassign the points of the original region
     for (auto&& pnt: p.points) {
@@ -231,11 +242,19 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
    * @pre left parent is p.parent
    */
 
-  void split(Page &p, Page *right_parent = p.parent) {
+  void split(Page &p, Page *right_parent = NULL) {
+    if (!right_parent) {
+      right_parent = p.parent;
+    }
+    double split_pt = p.isRegionPage ? calcRegionSplit(p) : calcPointSplit(p);
+    split(p, right_parent, p.splittingDomain, split_pt);
+  }
+
+  void split(Page &p, Page *right_parent, unsigned dim, double split_pt) {
       if (p.isRegionPage)
-        split_rp(p, right_parent);
+        split_rp(p, right_parent, dim, split_pt);
       else
-        split_pp(p, right_parent);
+        split_pp(p, right_parent, dim, split_pt);
   }
   
   /** Returns true iff @a p is in the tree.
@@ -243,7 +262,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
    */
   bool query(point_type p, PointPage& pointpage, Page *head = root) {
     // we reached the leaf
-    if (!head.isRegionPage) {
+    if (!head->isRegionPage) {
       pointpage = head;
       // TODO: we could speed this up slightly if we just ignored/assumed no duplicate points
       // (by not doing this for loop)
@@ -262,7 +281,6 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type));
     }
   }
   
-
   Page *root;
   
   std::vector<PointPage> pointPages;
