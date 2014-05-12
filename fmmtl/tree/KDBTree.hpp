@@ -70,7 +70,9 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     srand(1);
     // create empty root page
     //pointPages.emplace_back();
-    root = new PointPage();//&pointPages[0];
+    PointPage *pp = new PointPage();//&pointPages[0];
+    pointPages.push_back(pp);
+    root = pp;
     rootBox = get_boundingbox(first, last);
     
     insert_range(first, last);
@@ -222,6 +224,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
   void split_pp(PointPage &p,  RegionPage *right_parent, unsigned dim, double split_pt) {
     // create new right page, the old page will be left
     PointPage *new_pp = new PointPage();
+    pointPages.push_back(new_pp);
     PointPage &new_p = *new_pp;
     //std::cout << "size of new_p " << new_p.points.size() << std::endl;
     // new points for p
@@ -321,22 +324,38 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
         split_pp(((dynamic_cast<PointPage&> (p))), right_parent, dim, split_pt);
   }
   
+  public:
   /** Returns true iff @a p is in the tree.
    * @param[out] page will be set to the PointPage that either contains or would contain @a p
    */
-  bool query(point_type p, PointPage *&pointpage, Page *head = NULL) {
+
+  bool query(point_type p) {
+    // for (auto &&page : pointPages) {
+    //   for (auto && point : page->points) {
+    //       if (point==p) {
+    //         return true;
+    //       }
+    //   }
+    // }
+    // return false;
+    PointPage *dummy;
+    return query(p, dummy);
+  }
+  bool query(point_type p, PointPage *&pointpage, Page *head = NULL, bool flag = false) {
     if (!head)
       head = root;
     // we reached the leaf
     if (!head->isRegionPage) {
-      std::cout << "found" <<std::endl;
+      // std::cout << "found" <<std::endl;
       pointpage = (dynamic_cast<PointPage *> (head));
       // TODO: we could speed this up slightly if we just ignored/assumed no duplicate points
       // (by not doing this for loop)
       for (auto&& point : pointpage->points) {
-          if (point == p) {
-              return true;
-          }
+        // if (flag)
+          // std::cout << "Equal? " << point << ", " << p << std::endl;
+        if (point == p) {
+            return true;
+        }
       }
       return false;
     }
@@ -346,19 +365,22 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     for (auto&& region : rp.children) {
       assert(region.page->parent == rp2);
       assert(region.box == region.page->parent->children[region.page->pidx].box);
-      std::cout << "pidx " << region.page->pidx << std::endl;
-      std::cout << "lookning for " << p << std::endl;
-      if (region.box.contains(p)) {
-        std::cout << "rp1box " << region.box << std::endl;
+      //std::cout << "pidx " << region.page->pidx << std::endl;
+      //std::cout << "lookning for " << p << std::endl;
+      bool contained = true;
+      auto min = region.box.min();
+      auto max = region.box.max();
+      for (unsigned i = 0; i != DIM; ++i) {
+        if (p[i] < min[i] || p[i] >= max[i]) {
+          contained = false;
+          break;
+        }
+      }
+      if (contained) {
+        return query(p, pointpage, region.page, flag);
+      }
+        //std::cout << "rp1box " << region.box << std::endl;
         // print(region.page);
-        return query(p, pointpage, region.page);
-      }
-      else {
-        if (rp2 && rp2->parent)
-          std::cout << "rp2box " << rp2->parent->children[rp2->pidx].box << std::endl;
-        else
-          std::cout << "rp2box " << std::endl;
-      }
 
     }
 
@@ -398,6 +420,6 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
 
   BoundingBox<DIM> rootBox;
   
-  std::vector<PointPage> pointPages;
+  std::vector<PointPage*> pointPages;
   std::vector<RegionPage> regionPages;
 };

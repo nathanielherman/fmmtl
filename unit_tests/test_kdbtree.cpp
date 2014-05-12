@@ -27,8 +27,16 @@ int main(int argc, char** argv)
     int np = atoi(argv[3]);
     NDBTree<DIM> tree(points.begin(), points.end(), nr, np);
   }
-  else
-    NDBTree<DIM> tree(points.begin(), points.end(), 10);
+  else {
+    NDBTree<DIM> tree(points.begin(), points.end(), 10, 10);
+    auto i =0;
+    for (auto &&p : points) {
+      //std::cout << i << std::endl;
+
+      assert(tree.query(p));
+      ++i;
+    }
+  }
 
   // tree.print();
 }
