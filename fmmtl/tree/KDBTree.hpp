@@ -17,13 +17,15 @@ using boost::iterator_adaptor;
 #include "fmmtl/util/Logger.hpp"
 #include "fmmtl/numeric/Vec.hpp"
 #include "BoundingBox.hpp"
-#include "MortonCoder.hpp"
 
 #define CACHE_SZ 4096
 
+//! Class for tree structure
 template <unsigned DIM>
 struct NDBTree {
 
+
+// type declarations
 typedef Vec<DIM,double> point_type;
 typedef BoundingBox<DIM> bounding_box_type;
 
@@ -40,7 +42,7 @@ struct Page {
 };
 
 struct region_type {
-  BoundingBox<DIM> box;
+  bounding_box_type box;
   Page *page;
 };
 
@@ -54,7 +56,7 @@ struct PointPage : public Page {
   PointPage() : Page(), points() { this->isRegionPage = false; }
 };
 
-
+// Precomputed n_crit_region_ and n_crit_point_
 static constexpr unsigned n_crit_region = CACHE_SZ / (sizeof(region_type)) - CACHE_SZ/100;
 static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE_SZ/100;
 
@@ -75,40 +77,144 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     
     insert_range(first, last);
   }
+
+  /************************************
+   ********** PRINTING HELPERS ********8
+   ************************************/
   
    void print(Page *p) {
       if (!p->isRegionPage) {
           PointPage *pp = dynamic_cast<PointPage*> (p);
-
           std::cout << "Point Page with bounding box" << std::endl;
           for (auto&& point: pp->points) {
-   //         std::cout << point << std::endl;
+   // std::cout << point << std::endl;
           }
-   //       std::cout << std::endl;
+   // std::cout << std::endl;
         return;
       }
       RegionPage *rp = dynamic_cast<RegionPage*> (p);
-
       for (auto&& region: rp->children) {
         std::cout << "Bounding box: " << region.box << std::endl;
         print(region.page);
       }
   }
+
   void print() {
-    //return;
-  //    std::cout << "\n\n\n\n Printing Tree " << std::endl;
-//    std::cout << "Root bounding box" << rootBox << std::endl;
+    // std::cout << "\n\n\n\n Printing Tree " << std::endl;
+    // std::cout << "Root bounding box" << rootBox << std::endl;
     print(root);
-//    std::cout << "End of tree\n\n" << std::endl;
+    // std::cout << "End of tree\n\n" << std::endl;
+  }
+
+  // @brief helper for print_graph
+  void print_edge(size_t p1, size_t p2) {
+    std::cout << p1 << " " << p2 << std::endl;
+  }
+  // @brief helper for print_graph
+  void print_point_3d(point_type p) {
+    std::cout << p << std::endl; 
+  }
+
+  /* prints bounding box
+   * @pre DIM is 2 or 3
+   * @post if DIM = 2, old_num_nodes + 4 = new_num_nodes
+   * @post if DIM = 3, old_num_nodes + 8 = new_num_nodes
+   * @param nodes tells us whether to print nodes or edges
+   */
+
+  size_t print_box(bounding_box_type box, size_t num_nodes, bool nodes) {
+    if (DIM == 2) {
+      point_type p1 = box.min();
+      point_type p2 = box.min();
+      p1[0] = box.max()[0];
+      p2[1] = box.max()[1];
+
+      size_t min_n = num_nodes++;
+      size_t max_n = num_nodes++;
+      size_t p1_n = num_nodes++;
+      size_t p2_n = num_nodes++;
+
+      if (nodes) {
+        std::cout << box.min() << " 0 " << std::endl;
+        std::cout << box.max() << " 0 " <<std::endl;
+        std::cout << p1 << " 0 " << std::endl;
+        std::cout << p2 << " 0 " << std::endl;
+      }
+      else {
+        print_edge(min_n, p1_n); print_edge(min_n, p2_n);
+        print_edge(max_n, p1_n); print_edge(max_n, p2_n);
+      } 
+    }
+    else if (DIM == 3) {
+      point_type p1 = box.min(); point_type p2 = box.min(); point_type p3 = box.min();
+      point_type p4 = box.min(); point_type p5 = box.min(); point_type p6 = box.min();
+
+      p1[0] = box.max()[0];
+      p2[0] = box.max()[0]; p2[1] = box.max()[1];
+      p3[0] = box.max()[0]; p3[2] = box.max()[2];
+      p4[1] = box.max()[1]; p4[2] = box.max()[2];
+      p5[1] = box.max()[1];
+      p6[2] = box.max()[2];
+
+      size_t min_n = num_nodes++;
+      size_t max_n = num_nodes++;
+      size_t p1_n = num_nodes++; size_t p2_n = num_nodes++; size_t p3_n = num_nodes++;
+      size_t p4_n = num_nodes++; size_t p5_n = num_nodes++; size_t p6_n = num_nodes++;
+
+      if (nodes) {
+        print_point_3d(box.min()); print_point_3d(box.max());
+        print_point_3d(p1); print_point_3d(p2); print_point_3d(p3);
+        print_point_3d(p4); print_point_3d(p5); print_point_3d(p6);
+      }
+      else {
+        print_edge(min_n, p1_n); print_edge(min_n, p5_n); print_edge(min_n, p6_n);
+        print_edge(max_n, p2_n); print_edge(max_n, p3_n); print_edge(max_n, p4_n);
+        print_edge(p1_n, p2_n); print_edge(p1_n, p3_n); print_edge(p2_n, p5_n);
+        print_edge(p5_n, p4_n); print_edge(p3_n, p6_n); print_edge(p4_n, p6_n);
+      } 
+    }
+    return num_nodes;
+  }
+
+  size_t print_graph_rest(Page *p, size_t num_nodes, bool nodes) {
+    if (p->isRegionPage) {
+      RegionPage *rp = dynamic_cast<RegionPage*> (p);
+      for (auto&& region: rp->children) {
+        num_nodes = print_box(region.box, num_nodes, nodes);
+        num_nodes = print_graph_rest(region.page, num_nodes, nodes);
+      }
+    }
+    return num_nodes;
+  }
+
+  /* prints all the points and adds a zero coord at the end so that it
+   * works with the visualizer
+   */
+  void print_points() {
+    for (auto &&page : pointPages) {
+      for (auto && point : page->points) {
+        assert(page->points.size() <= n_crit_point_);
+        std::cout << point << " 0" << std::endl;
+      }
+    }
+  }
+
+  // prints nodes and edges for the visualizer
+  void print_graph(bool nodes) {
+    if (DIM == 2 || DIM == 3) {
+      size_t num_nodes = 0;
+      num_nodes = print_box(rootBox, num_nodes, nodes);
+      print_graph_rest(root, num_nodes, nodes);
+      if (nodes) {
+        print_points();
+      }
+    } 
   }
   
   private:
-  
 
-  //! Uses incremental bucket sorting
   template <typename PointIter>
   void insert_range(PointIter p_first, PointIter p_last) {
-    
     for (auto it = p_first; it != p_last; ++it) {
       if (!insert(*it)) {
         // inserted duplicate point // TODO: notify user
@@ -122,8 +228,6 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     // we create the root in the constructor
     assert(root != NULL);
     assert(rootBox.contains(p));
-
-    //std::cout << "Adding point: " << p << std::endl;
     
     PointPage &page = *_query(p);
     // this point was already inserted
@@ -186,8 +290,8 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
      point_type right_min = cur_box.min();
      // right box begins at split_pt in the dim dimension
      right_min[dim] = split_pt;
-     BoundingBox<DIM> left_box(cur_box.min(), left_max);
-     BoundingBox<DIM> right_box(right_min, cur_box.max());
+     bounding_box_type left_box(cur_box.min(), left_max);
+     bounding_box_type right_box(right_min, cur_box.max());
      
      auto rt1 = region_type{left_box, &p};
      // need to update parent with new box information
@@ -250,8 +354,9 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     point_type right_min = cur_box.min();
     // box begins at split_pt in the dim dimension
     right_min[dim] = split_pt;
-    BoundingBox<DIM> left_box(cur_box.min(), left_max);
-    BoundingBox<DIM> right_box(right_min, cur_box.max());
+
+    bounding_box_type left_box(cur_box.min(), left_max);
+    bounding_box_type right_box(right_min, cur_box.max());
 
     // reassign the points of the original region
     for (auto&& pnt: p.points) {
@@ -298,7 +403,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     parent->children.push_back(rt);
     rt.page->parent = parent;
     rt.page->pidx = parent->children.size() - 1;
-    if (parent->children.size() == n_crit_region_) {
+    if (parent->children.size() > n_crit_region_) {
       split(*parent);
     }
    }
@@ -368,38 +473,24 @@ private:
       }
     }
 
-      std::cout << "pidxtwo " << rp.pidx << std::endl;
-        std::cout << "My region_box " << rp.parent->children[rp.pidx].box << std::endl;
-            std::cout << "My rootbox " << rootBox << std::endl;
-    std::cout << "Tried to insert " << p << std::endl;
-        assert(rp.parent->children[rp.pidx].box.contains(p));
-        if (rp.isRegionPage) {
-          for (auto&& pg : rp.children ) {
-            std::cout << "Children region box" << pg.box << std::endl;
-          }
-        }
-
-    std::cout << "My rootbox " << rootBox << std::endl;
-    std::cout << "Tried to insert " << p << std::endl;
-    // print(root);
     assert(0);
-    return false;
+    return NULL;
   }
 
   template <typename PointIter>
-  BoundingBox<DIM> get_boundingbox(PointIter first, PointIter last) {
+  bounding_box_type get_boundingbox(PointIter first, PointIter last) {
     // Construct a bounding box
-    BoundingBox<DIM> bb(first, last);
+    bounding_box_type bb(first, last);
     // Determine the size of the maximum side
     point_type extents = bb.dimensions();
     double max_side = *std::max_element(extents.begin(), extents.end());
     // Make it square and add some wiggle room   TODO: Generalize on square
-    return BoundingBox<DIM>(bb.center(), (1.0+1e-6) * max_side / 2.0);
+    return bounding_box_type(bb.center(), (1.0+1e-6) * max_side / 2.0);
   }
   
   Page *root;
 
-  BoundingBox<DIM> rootBox;
+  bounding_box_type rootBox;
   
   std::vector<PointPage*> pointPages;
 };
