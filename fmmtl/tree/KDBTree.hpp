@@ -79,7 +79,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
   }
 
   /************************************
-   ********** PRINTING HELPERS ********8
+   ********** PRINTING HELPERS ********
    ************************************/
   
    void print(Page *p) {
@@ -213,6 +213,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
   
   private:
 
+  /** Inserts the given range of points into the tree */
   template <typename PointIter>
   void insert_range(PointIter p_first, PointIter p_last) {
     for (auto it = p_first; it != p_last; ++it) {
@@ -223,7 +224,12 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     }
   }
   
-  // insert a single point
+  /** Insert a point into the tree
+   * @param[in] p the point to add
+   * @return false if p is already in the tree, true otherwise
+   * @post query(p)==true
+   * Complexity: O(logn)
+   */
   bool insert(point_type p) {
     // we create the root in the constructor
     assert(root != NULL);
@@ -270,6 +276,15 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     return (*median).box.min()[p.splittingDomain];
   }
 
+  /** Splits the given region page. Will also split parent pages that overflow
+      as a result of the split
+   * @param[in] p The page to split
+   * @param[in] right_parent Optional pointer to page that should be the right page of the split's parent. Set to NULL to make it just p.parent
+   * @param[in] dim Dimension to split on 0 <= dim < DIM
+   * @param[in] split_pt The coordinate (of @a dim) to split on
+   * @pre p.children.size() > n_crit_region_
+   * @post p.children.size() <= n_crit_region_
+   */
   void split_rp(RegionPage& p,  RegionPage *right_parent, unsigned dim, double split_pt) {
      RegionPage &right_page = *(new RegionPage());
      
@@ -337,6 +352,15 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     return (*median)[p.splittingDomain];
   }
 
+  /** Splits the given point page. Will also adjust any parent pages that
+      overflow as a result of split
+   * @param[in] p The point page to split
+   * @param[in] right_parent Optional pointer to page that should be the right page of the split's parent. Set to NULL to make it just p.parent
+   * @param[in] dim Dimension to split on 0 <= dim < DIM
+   * @param[in] split_pt The coordinate (of @a dim) to split on
+   * @pre p.points.size() > n_crit_point_
+   * @post p.points.size() <= n_crit_point_
+   */
   void split_pp(PointPage &p,  RegionPage *right_parent, unsigned dim, double split_pt) {
     // create new right page, the old page will be left
     PointPage &new_p = *(new PointPage());
@@ -408,8 +432,12 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     }
    }
   
-  /* @pre p is a full point page the first time this is called
+  /** Split the given Page
+   * @param[in] p Page to split
+   * @param[in] right_parent Optional pointer to page that should be the right page of the split's parent. Set to NULL to make it just p.parent (used for pushing the split of a region page downward)
+   * @pre p is a full point page the first time this is called
    * @pre left parent is p.parent
+   * @post p is in a valid state
    */
   void split(Page &p, RegionPage *right_parent = NULL) {
     double split_pt = p.isRegionPage ? 
@@ -426,7 +454,8 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
   
   public:
   /** Returns true iff @a p is in the tree.
-   * @param[out] page will be set to the PointPage that either contains or would contain @a p
+   * @param[in] p Point to search for
+   * Complexity: O(logn)
    */
   bool query(point_type p) {
     PointPage *page = _query(p);
@@ -434,6 +463,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
   }
 
 private:
+  /** Return true iff @a p is in the given PointPage */
   bool inPointPage(point_type p, PointPage *page) {
     for (auto&& point : page->points) {
       if (point == p) {
@@ -443,7 +473,11 @@ private:
     return false;
   }
 
-  /** finds just the PointPage that a given point would be on */
+  /** Finds the PointPage that a given point would be on
+   * @param[in] p Point to search for
+   * @param[in] head Pointer to node to start at (usually just used for recursion)
+   * @return PointPage that p would be in, if it's in the tree
+   */
   PointPage *_query(point_type p, Page *head = NULL) {
     if (!head)
       head = root;
@@ -477,6 +511,7 @@ private:
     return NULL;
   }
 
+  /** Makes a bounding box containing all of the points in [first, last) */
   template <typename PointIter>
   bounding_box_type get_boundingbox(PointIter first, PointIter last) {
     // Construct a bounding box
