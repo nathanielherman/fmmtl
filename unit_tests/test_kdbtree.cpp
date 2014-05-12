@@ -4,6 +4,8 @@
 #include <iostream>
 #include <string>
 
+#define DIM 3
+
 int main(int argc, char** argv)
 {
   if (argc < 2) {
@@ -13,13 +15,20 @@ int main(int argc, char** argv)
 
   int N = atoi(argv[1]);
 
-  typedef Vec<3,double> point_type;
+
+  typedef Vec<DIM,double> point_type;
 
   std::vector<point_type> points(N);
   for (int k = 0; k < N; ++k)
     points[k] = fmmtl::random<point_type>::get();
 
-  NDBTree<3> tree(points.begin(), points.end(), 4, 4);
+  if (argc == 4) {
+    int nr = atoi(argv[2]);
+    int np = atoi(argv[3]);
+    NDBTree<DIM> tree(points.begin(), points.end(), nr, np);
+  }
+  else
+    NDBTree<DIM> tree(points.begin(), points.end(), 10);
 
-  tree.print();
+  // tree.print();
 }
