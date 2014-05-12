@@ -62,11 +62,16 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
 
   unsigned n_crit_region_;
   unsigned n_crit_point_;
-  // MortonCoder<DIM> coder_;
 
   template <typename PointIter>
-  NDBTree(PointIter first, PointIter last, unsigned ncr_usr = n_crit_region, unsigned ncp_usr = n_crit_point)
-      : n_crit_region_(ncr_usr), n_crit_point_(ncp_usr) {
+  /** Create an NDBTree
+   * @param[in] first, last Insert points in range [first, last)
+   * @param[in] max_reg Optional, maximum regions per region page
+   * @param[in] max_pt Optional, maximum points per point page
+   * @pre No duplicate points in [first, last)
+   */
+  NDBTree(PointIter first, PointIter last, unsigned max_reg = n_crit_region, unsigned max_pt = n_crit_point)
+      : n_crit_region_(max_reg), n_crit_point_(max_pt) {
     std::cout << "n_crit_region " << n_crit_region_ << ", n_crit_point " << n_crit_point_ << std::endl;
     
     // create empty root page
@@ -253,6 +258,9 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     return true;
   }
 
+  /** Returns where to split the given region page 
+   * (using p.splittingDomain as the dimension to split on) 
+   */
   double calcRegionSplit(RegionPage& p) {
     auto& regions = p.children;
     auto dim = p.splittingDomain;
@@ -341,7 +349,10 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
      push_page(right_parent, rt2);
    }
 
-   double calcPointSplit(PointPage& p) {
+  /** Determines where to split given PointPage at
+   * (Uses p.splittingDomain as dimension)
+   */
+  double calcPointSplit(PointPage& p) {
     auto median = p.points.begin() + p.points.size()/2;
     auto dim = p.splittingDomain;
     // median of key_i
@@ -351,7 +362,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
                       });
     return (*median)[p.splittingDomain];
   }
-
+  
   /** Splits the given point page. Will also adjust any parent pages that
       overflow as a result of split
    * @param[in] p The point page to split
@@ -407,12 +418,18 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     region_type rt_np = region_type{right_box, &new_p};
     push_page(right_parent, rt_np);
    } 
-   
-   void update_parent(region_type &rt) {
-     assert(rt.page->parent != NULL);
-     rt.page->parent->children[rt.page->pidx].box = rt.box;
-   }
 
+  /** Update rt.page to have the given region_type in its parent 
+   * (Essentially, updating rt.page's box in its parent)
+   */
+  void update_parent(region_type &rt) {
+    assert(rt.page->parent != NULL);
+    rt.page->parent->children[rt.page->pidx].box = rt.box;
+  }
+
+  /** create a parent for the given page if necessary
+   * (i.e. if it is currently the root page)
+   */
   void create_parent(Page *page) {
     if (page->parent)
       return;
@@ -422,15 +439,16 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     page->pidx = 0;
     root = parent;
   }
-        
-   void push_page(RegionPage *parent, region_type &rt) {
+  
+  /** Add @a rt into @a parent (and split parent if it then overflows) */
+  void push_page(RegionPage *parent, region_type &rt) {
     parent->children.push_back(rt);
     rt.page->parent = parent;
     rt.page->pidx = parent->children.size() - 1;
     if (parent->children.size() > n_crit_region_) {
       split(*parent);
     }
-   }
+  }
   
   /** Split the given Page
    * @param[in] p Page to split
