@@ -149,8 +149,18 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     auto& regions = p.children;
     auto median = regions.begin() + regions.size()/2;
     auto dim = p.splittingDomain;
-    std::nth_element(regions.begin(), median, regions.end(), 
-                     [=] (const region_type r1, const region_type r2) { return r1.box.min()[dim] < r2.box.min()[dim]; });
+    //std::nth_element(regions.begin(), median, regions.end(), 
+    std::sort(regions.begin(), regions.end(),
+	      [=] (const region_type r1, const region_type r2) { return r1.box.min()[dim] < r2.box.min()[dim]; });
+    median = regions.begin() + regions.size()/2;
+    auto minPt = regions[0].box.min()[p.splittingDomain];
+    while (median != regions.end() && (*median).box.min()[p.splittingDomain] == minPt) {
+      median++;
+    }
+    if (median == regions.end()) {
+      p.splittingDomain = (p.splittingDomain + 1) % DIM;
+      return calcRegionSplit(p);
+    }
     return (*median).box.min()[p.splittingDomain];
   }
 
@@ -189,6 +199,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
      assert(right_parent);
 
      for (auto&& region : old_left_regions) {
+       assert(!(left_box.contains(region.box) && right_box.contains(region.box)));
        if (left_box.contains(region.box)/*region.box.max()[dim] <= split_pt*/) { // fully left of split
          p.children.push_back(region);
          region.page->pidx = p.children.size()-1;
