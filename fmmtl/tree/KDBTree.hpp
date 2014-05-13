@@ -13,11 +13,13 @@
 
 //! Class for tree structure
 template <unsigned DIM>
-struct NDBTree {
+struct KDBTree {
+public:
   // type declarations
   typedef Vec<DIM,double> point_type;
   typedef BoundingBox<DIM> bounding_box_type;
   
+private:
   struct RegionPage;
   struct Page {
     bool isRegionPage;
@@ -51,15 +53,16 @@ struct NDBTree {
   
   unsigned n_crit_region_;
   unsigned n_crit_point_;
-  
+
+public:
   template <typename PointIter>
-  /** NDBTree constructor
+  /** KDBTree constructor
    * @param[in] first, last Insert points in range [first, last)
    * @param[in] max_reg Optional, maximum regions per region page
    * @param[in] max_pt Optional, maximum points per point page
    * @pre No duplicate points in [first, last)
    */
-  NDBTree(PointIter first, PointIter last, unsigned max_reg = n_crit_region, unsigned max_pt = n_crit_point)
+  KDBTree(PointIter first, PointIter last, unsigned max_reg = n_crit_region, unsigned max_pt = n_crit_point)
       : n_crit_region_(max_reg), n_crit_point_(max_pt) {
     std::cerr << "n_crit_region " << n_crit_region_ << ", n_crit_point " << n_crit_point_ << std::endl;
     
@@ -72,8 +75,8 @@ struct NDBTree {
     insert_range(first, last);
   }
 
-  /** NDBTree destructor */
-  ~NDBTree() {
+  /** KDBTree destructor */
+  ~KDBTree() {
     for (PointPage *p : pointPages_) {
       delete p;
     }
@@ -82,32 +85,71 @@ struct NDBTree {
     }
   }
 
+  /** Returns the bounding box of the entire tree */
+  bounding_box_type boundingBox() {
+    return rootBox;
+  }
+
+  /** Insert a point into the tree
+   * @param[in] p the point to add
+   * @return false if p is already in the tree, true otherwise
+   * @pre boundingBox().contains(p)
+   * @post query(p)==true
+   * Complexity: O(logn)
+   */
+  bool insert(point_type p) {
+    // we create the root in the constructor
+    assert(root != NULL);
+    assert(boundingBox().contains(p));
+    
+    PointPage &page = *_query(p);
+    // this point was already inserted
+    if (inPointPage(p, &page)) {
+      return false;
+    }
+
+    page.points.push_back(p);
+    
+    if (page.points.size() <= n_crit_point_) {
+      return true;
+    }
+    
+    // need to split this point page :(
+    split(page);
+    
+    return true;
+  }
+
+  /** Returns true iff @a p is in the tree.
+   * @param[in] p Point to search for
+   * Complexity: O(logn)
+   */
+  bool query(point_type p) {
+    PointPage *page = _query(p);
+    return inPointPage(p, page);
+  }
+  
+  /** Return all points in the given box
+   * @param[in] box The BoundingBox in which to query
+   * @return vector of points in the tree which are within @a box
+   * Use query() to query for the presence of individual points
+   */
+  std::vector<point_type> query_range(const bounding_box_type& box) {
+    std::vector<point_type> pts;
+    _query_range(root, box, pts);
+    return pts;
+  }
+
   /************************************
    ********** PRINTING HELPERS ********
    ************************************/
-  
-   void print(Page *p) {
-      if (!p->isRegionPage) {
-          PointPage *pp = dynamic_cast<PointPage*> (p);
-          std::cout << "Point Page with bounding box" << std::endl;
-          for (auto&& point: pp->points) {
-   // std::cout << point << std::endl;
-          }
-   // std::cout << std::endl;
-        return;
-      }
-      RegionPage *rp = dynamic_cast<RegionPage*> (p);
-      for (auto&& region: rp->children) {
-        std::cout << "Bounding box: " << region.box << std::endl;
-        print(region.page);
-      }
-  }
 
+  /** Print the tree */
   void print() {
-    // std::cout << "\n\n\n\n Printing Tree " << std::endl;
-    // std::cout << "Root bounding box" << rootBox << std::endl;
+    std::cout << "\n\n\n\n Printing Tree " << std::endl;
+    std::cout << "Root bounding box" << rootBox << std::endl;
     print(root);
-    // std::cout << "End of tree\n\n" << std::endl;
+    std::cout << "End of tree\n\n" << std::endl;
   }
 
   // @brief helper for print_graph
@@ -125,7 +167,6 @@ struct NDBTree {
    * @post if DIM = 3, old_num_nodes + 8 = new_num_nodes
    * @param nodes tells us whether to print nodes or edges
    */
-
   size_t print_box(bounding_box_type box, size_t num_nodes, bool nodes) {
     if (DIM == 2) {
       point_type p1 = box.min();
@@ -180,22 +221,6 @@ struct NDBTree {
     return num_nodes;
   }
 
-  /* prints the subgraph that starts at page p
-   * @return old_num_nodes + num_nodes that are printed
-   * if @param nodes then print the nodes, else print the edges
-   */
-
-  size_t print_graph_rest(Page *p, size_t num_nodes, bool nodes) {
-    if (p->isRegionPage) {
-      RegionPage *rp = dynamic_cast<RegionPage*> (p);
-      for (auto&& region: rp->children) {
-        num_nodes = print_box(region.box, num_nodes, nodes);
-        num_nodes = print_graph_rest(region.page, num_nodes, nodes);
-      }
-    }
-    return num_nodes;
-  }
-
   /* prints all the points and adds a zero coord at the end so that it
    * works with the visualizer
    */
@@ -231,47 +256,71 @@ struct NDBTree {
       print_points();
     }
   }
-  
-  private:
 
+private:
+  /** Print tree starting at page p */
+  void print(Page *p) {
+    if (!p->isRegionPage) {
+      PointPage *pp = dynamic_cast<PointPage*> (p);
+      std::cout << "Point Page with bounding box" << std::endl;
+      for (auto&& point: pp->points) {
+	std::cout << point << std::endl;
+      }
+      std::cout << std::endl;
+      return;
+    }
+    RegionPage *rp = dynamic_cast<RegionPage*> (p);
+    for (auto&& region: rp->children) {
+      std::cout << "Bounding box: " << region.box << std::endl;
+      print(region.page);
+    }
+  }
+  
+  /* prints the subgraph that starts at page p
+   * @return old_num_nodes + num_nodes that are printed
+   * if @param nodes then print the nodes, else print the edges
+   */
+  size_t print_graph_rest(Page *p, size_t num_nodes, bool nodes) {
+    if (p->isRegionPage) {
+      RegionPage *rp = dynamic_cast<RegionPage*> (p);
+      for (auto&& region: rp->children) {
+        num_nodes = print_box(region.box, num_nodes, nodes);
+        num_nodes = print_graph_rest(region.page, num_nodes, nodes);
+      }
+    }
+    return num_nodes;
+  }
+  
   /** Inserts the given range of points into the tree */
   template <typename PointIter>
   void insert_range(PointIter p_first, PointIter p_last) {
     for (auto it = p_first; it != p_last; ++it) {
-      // ensure no duplicates
-      if (!insert(*it)) {
-	continue;
-      }
+      // we just ignore duplicates currently
+      insert(*it);
     }
   }
-  
-  /** Insert a point into the tree
-   * @param[in] p the point to add
-   * @return false if p is already in the tree, true otherwise
-   * @post query(p)==true
-   * Complexity: O(logn)
-   */
-  bool insert(point_type p) {
-    // we create the root in the constructor
-    assert(root != NULL);
-    assert(rootBox.contains(p));
-    
-    PointPage &page = *_query(p);
-    // this point was already inserted
-    if (inPointPage(p, &page)) {
-      return false;
-    }
 
-    page.points.push_back(p);
-    
-    if (page.points.size() <= n_crit_point_) {
-      return true;
-    }
-    
-    // need to split this point page :(
-    split(page);
-    
-    return true;
+  /** Split the given Page
+   * @param[in] p Page to split
+   * @param[in] right_parent Optional pointer to page that should be the right page of the split's parent. Set to NULL to make it just p.parent (used for pushing the split of a region page downward)
+   * @param[in] dim Optional, dimension to split on
+   * @param[in] split_pt Optional, point in dim to split at
+   * @pre p is a full point page the first time this is called
+   * @pre left parent is p.parent
+   * @post p is in a valid state
+   */
+  void split(Page &p, RegionPage *right_parent, unsigned dim, double split_pt) {
+      if (p.isRegionPage)
+        split_rp(((dynamic_cast<RegionPage&> (p))), right_parent, dim, split_pt);
+      else
+        split_pp(((dynamic_cast<PointPage&> (p))), right_parent, dim, split_pt);
+  }
+
+  /** Same as above but chooses dim and split_pt automatically */
+  void split(Page &p, RegionPage *right_parent = NULL) {
+    double split_pt = p.isRegionPage ? 
+    calcRegionSplit((dynamic_cast<RegionPage&> (p))) : calcPointSplit((dynamic_cast<PointPage&> (p)));
+    split(p, right_parent, p.splittingDomain, split_pt);
   }
 
   /** Returns where to split the given region page 
@@ -445,7 +494,7 @@ struct NDBTree {
     // add new right_page to its parent
     region_type rt_np = region_type{right_box, &new_p};
     push_page(right_parent, rt_np);
-   } 
+  } 
 
   /** Update rt.page to have the given region_type in its parent 
    * (Essentially, updating rt.page's box in its parent)
@@ -479,48 +528,6 @@ struct NDBTree {
     }
   }
   
-  /** Split the given Page
-   * @param[in] p Page to split
-   * @param[in] right_parent Optional pointer to page that should be the right page of the split's parent. Set to NULL to make it just p.parent (used for pushing the split of a region page downward)
-   * @pre p is a full point page the first time this is called
-   * @pre left parent is p.parent
-   * @post p is in a valid state
-   */
-  void split(Page &p, RegionPage *right_parent = NULL) {
-    double split_pt = p.isRegionPage ? 
-    calcRegionSplit((dynamic_cast<RegionPage&> (p))) : calcPointSplit((dynamic_cast<PointPage&> (p)));
-    split(p, right_parent, p.splittingDomain, split_pt);
-  }
-
-  void split(Page &p, RegionPage *right_parent, unsigned dim, double split_pt) {
-      if (p.isRegionPage)
-        split_rp(((dynamic_cast<RegionPage&> (p))), right_parent, dim, split_pt);
-      else
-        split_pp(((dynamic_cast<PointPage&> (p))), right_parent, dim, split_pt);
-  }
-  
-  public:
-  /** Returns true iff @a p is in the tree.
-   * @param[in] p Point to search for
-   * Complexity: O(logn)
-   */
-  bool query(point_type p) {
-    PointPage *page = _query(p);
-    return inPointPage(p, page);
-  }
-
-  /** Return all points in the given box
-   * @param[in] box The BoundingBox in which to query
-   * @return vector of points in the tree which are within @a box
-   * Use query() to query for the presence of individual points
-   */
-  std::vector<point_type> query_range(const bounding_box_type& box) {
-    std::vector<point_type> pts;
-    _query_range(root, box, pts);
-    return pts;
-  }
-
-private:
   /** Recursive helper function for query_range */
   void _query_range(const Page *head, const bounding_box_type& box, std::vector<point_type>& pts) {
     // reached a leaf
