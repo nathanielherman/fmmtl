@@ -25,46 +25,46 @@ template <unsigned DIM>
 struct NDBTree {
 
 
-// type declarations
-typedef Vec<DIM,double> point_type;
-typedef BoundingBox<DIM> bounding_box_type;
+  // type declarations
+  typedef Vec<DIM,double> point_type;
+  typedef BoundingBox<DIM> bounding_box_type;
 
-struct RegionPage;
-struct Page {
+  struct RegionPage;
+  struct Page {
     bool isRegionPage;
     uint8_t splittingDomain;
     uint16_t pidx;
     RegionPage *parent;
+    
+    Page() : isRegionPage(false), splittingDomain(0), pidx(0), parent(NULL) {}
+    
+    virtual ~Page() {}
+  };
+  
+  struct region_type {
+    bounding_box_type box;
+    Page *page;
+  };
 
-  Page() : isRegionPage(false), splittingDomain(0), pidx(0), parent(NULL) {}
-
-  virtual ~Page() {}
-};
-
-struct region_type {
-  bounding_box_type box;
-  Page *page;
-};
-
-struct RegionPage : public Page {
+  struct RegionPage : public Page {
     std::vector<region_type> children;
     RegionPage() : Page(), children() { this->isRegionPage = true; }
-};
+  };
 
-struct PointPage : public Page {
-  std::vector<point_type> points;
-  PointPage() : Page(), points() { this->isRegionPage = false; }
-};
+  struct PointPage : public Page {
+    std::vector<point_type> points;
+    PointPage() : Page(), points() { this->isRegionPage = false; }
+  };
 
-// Precomputed n_crit_region_ and n_crit_point_
-static constexpr unsigned n_crit_region = CACHE_SZ / (sizeof(region_type)) - CACHE_SZ/100;
-static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE_SZ/100;
-
+  // Precomputed n_crit_region_ and n_crit_point_
+  static constexpr unsigned n_crit_region = CACHE_SZ / (sizeof(region_type)) - CACHE_SZ/100;
+  static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE_SZ/100;
+  
   unsigned n_crit_region_;
   unsigned n_crit_point_;
-
+  
   template <typename PointIter>
-  /** Create an NDBTree
+  /** NDBTree constructor
    * @param[in] first, last Insert points in range [first, last)
    * @param[in] max_reg Optional, maximum regions per region page
    * @param[in] max_pt Optional, maximum points per point page
@@ -76,11 +76,21 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     
     // create empty root page
     PointPage *pp = new PointPage();
-    pointPages.push_back(pp);
+    pointPages_.push_back(pp);
     root = pp;
     rootBox = get_boundingbox(first, last);
     
     insert_range(first, last);
+  }
+
+  /** NDBTree destructor */
+  ~NDBTree() {
+    for (PointPage *p : pointPages_) {
+      delete p;
+    }
+    for (RegionPage *p : regionPages_) {
+      delete p;
+    }
   }
 
   /************************************
@@ -196,7 +206,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
    * works with the visualizer
    */
   void print_points() {
-    for (auto &&page : pointPages) {
+    for (auto &&page : pointPages_) {
       for (auto && point : page->points) {
         assert(page->points.size() <= n_crit_point_);
         std::cout << point << " 0" << std::endl;
@@ -295,6 +305,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
    */
   void split_rp(RegionPage& p,  RegionPage *right_parent, unsigned dim, double split_pt) {
      RegionPage &right_page = *(new RegionPage());
+     regionPages_.push_back(&right_page);
      
      p.splittingDomain = right_page.splittingDomain = (p.splittingDomain+1) % DIM;
 
@@ -375,7 +386,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
   void split_pp(PointPage &p,  RegionPage *right_parent, unsigned dim, double split_pt) {
     // create new right page, the old page will be left
     PointPage &new_p = *(new PointPage());
-    pointPages.push_back(&new_p);
+    pointPages_.push_back(&new_p);
 
     // new points for p
     std::vector<point_type> ppoints;
@@ -434,6 +445,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
     if (page->parent)
       return;
     RegionPage *parent = new RegionPage();
+    regionPages_.push_back(parent);
     parent->children.push_back(region_type{rootBox, page});
     page->parent = parent;
     page->pidx = 0;
@@ -545,5 +557,6 @@ private:
 
   bounding_box_type rootBox;
   
-  std::vector<PointPage*> pointPages;
+  std::vector<PointPage*> pointPages_;
+  std::vector<RegionPage*> regionPages_;
 };
