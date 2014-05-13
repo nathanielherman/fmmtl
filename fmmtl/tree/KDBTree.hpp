@@ -4,10 +4,7 @@
  */
 
 #include <vector>
-
-
 #include <iostream>
-// #include <iomanip>
 
 #include "fmmtl/numeric/Vec.hpp"
 #include "BoundingBox.hpp"
@@ -17,12 +14,10 @@
 //! Class for tree structure
 template <unsigned DIM>
 struct NDBTree {
-
-
   // type declarations
   typedef Vec<DIM,double> point_type;
   typedef BoundingBox<DIM> bounding_box_type;
-
+  
   struct RegionPage;
   struct Page {
     bool isRegionPage;
@@ -66,7 +61,7 @@ struct NDBTree {
    */
   NDBTree(PointIter first, PointIter last, unsigned max_reg = n_crit_region, unsigned max_pt = n_crit_point)
       : n_crit_region_(max_reg), n_crit_point_(max_pt) {
-    std::cout << "n_crit_region " << n_crit_region_ << ", n_crit_point " << n_crit_point_ << std::endl;
+    std::cerr << "n_crit_region " << n_crit_region_ << ", n_crit_point " << n_crit_point_ << std::endl;
     
     // create empty root page
     PointPage *pp = new PointPage();
@@ -227,7 +222,9 @@ struct NDBTree {
   void insert_range(PointIter p_first, PointIter p_last) {
     for (auto it = p_first; it != p_last; ++it) {
       // ensure no duplicates
-      assert(insert(*it));
+      if (!insert(*it)) {
+	continue;
+      }
     }
   }
   
@@ -495,7 +492,35 @@ struct NDBTree {
     return inPointPage(p, page);
   }
 
+  /** Return all points in the given box
+   */
+  std::vector<point_type> query_range(const bounding_box_type& box) {
+    std::vector<point_type> pts;
+    _query_range(root, box, pts);
+    return pts;
+  }
+
 private:
+  void _query_range(const Page *head, const bounding_box_type& box, std::vector<point_type>& pts) {
+    // reached a leaf
+    if (!head->isRegionPage) {
+      const PointPage *pp = dynamic_cast<const PointPage*>(head);
+      for (auto&& p : pp->points) {
+	if (box.contains(p)) {
+	  pts.push_back(p);
+	}
+      }
+      return;
+    }
+
+    const RegionPage *rp = dynamic_cast<const RegionPage*>(head);
+    for (auto&& region : rp->children) {
+      if (box.intersects(region.box)) {
+        _query_range(region.page, box, pts);
+      }
+    }
+  }
+
   /** Return true iff @a p is in the given PointPage */
   bool inPointPage(point_type p, PointPage *page) {
     for (auto&& point : page->points) {
@@ -557,7 +582,7 @@ private:
   }
   
   Page *root;
-
+  
   bounding_box_type rootBox;
   
   std::vector<PointPage*> pointPages_;
