@@ -1,20 +1,14 @@
 #pragma once
-/** @file NDTree
- * @brief General class representing a {1D,2D,3D,4D}-BTree.
+/** @file KDBTree
+ * @brief General class representing a {2D,3D,4D}-BTree.
  */
 
 #include <vector>
-#include <bitset>
-#include <algorithm>
+
 
 #include <iostream>
-#include <iomanip>
+// #include <iomanip>
 
-#include <boost/iterator/iterator_adaptor.hpp>
-#include <boost/iterator/permutation_iterator.hpp>
-using boost::iterator_adaptor;
-
-#include "fmmtl/util/Logger.hpp"
 #include "fmmtl/numeric/Vec.hpp"
 #include "BoundingBox.hpp"
 
@@ -67,7 +61,7 @@ static constexpr unsigned n_crit_point = CACHE_SZ / (sizeof(point_type)) - CACHE
   template <typename PointIter>
   NDBTree(PointIter first, PointIter last, unsigned ncr_usr = n_crit_region, unsigned ncp_usr = n_crit_point)
       : n_crit_region_(ncr_usr), n_crit_point_(ncp_usr) {
-    std::cout << "n_crit_region " << n_crit_region_ << ", n_crit_point " << n_crit_point_ << std::endl;
+    std::cerr << "n_crit_region " << n_crit_region_ << ", n_crit_point " << n_crit_point_ << std::endl;
     
     // create empty root page
     PointPage *pp = new PointPage();
