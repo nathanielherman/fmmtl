@@ -280,9 +280,9 @@ struct NDBTree {
 		return r1.box.min()[dim] < r2.box.min()[dim]; 
 	      });
     auto median = regions.begin() + regions.size()/2;
-    auto minPt = regions[0].box.min()[p.splittingDomain];
+    auto minPt = regions[0].box.min()[dim];
     while (median != regions.end() 
-	   && (*median).box.min()[p.splittingDomain] == minPt) {
+	   && (*median).box.min()[dim] == minPt) {
       median++;
     }
     if (median == regions.end()) {
@@ -291,7 +291,7 @@ struct NDBTree {
       p.splittingDomain = (p.splittingDomain + 1) % DIM;
       return calcRegionSplit(p);
     }
-    return (*median).box.min()[p.splittingDomain];
+    return (*median).box.min()[dim];
   }
 
   /** Splits the given region page. Will also split parent pages that overflow
@@ -364,14 +364,25 @@ struct NDBTree {
    * (Uses p.splittingDomain as dimension)
    */
   double calcPointSplit(PointPage& p) {
-    auto median = p.points.begin() + p.points.size()/2;
     auto dim = p.splittingDomain;
     // median of key_i
-    std::nth_element (p.points.begin(), median, p.points.end(),
+    std::sort(p.points.begin(), p.points.end(),
                       [=] (const point_type& p1, const point_type& p2) {
                         return p1[dim] < p2[dim];
                       });
-    return (*median)[p.splittingDomain];
+
+    auto median = p.points.begin() + p.points.size()/2;
+    double min_pt = p.points[0][dim];
+    while (median != p.points.end() && (*median)[dim] == min_pt) {
+      median++;
+    }
+    if (median == p.points.end()) {
+      // every point is the same in this dimension, so try a different one
+      p.splittingDomain = (p.splittingDomain+1) % DIM;
+      return calcPointSplit(p);
+    }
+
+    return (*median)[dim];
   }
   
   /** Splits the given point page. Will also adjust any parent pages that
