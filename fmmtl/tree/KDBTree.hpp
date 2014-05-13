@@ -66,7 +66,7 @@ struct NDBTree {
    */
   NDBTree(PointIter first, PointIter last, unsigned max_reg = n_crit_region, unsigned max_pt = n_crit_point)
       : n_crit_region_(max_reg), n_crit_point_(max_pt) {
-    std::cout << "n_crit_region " << n_crit_region_ << ", n_crit_point " << n_crit_point_ << std::endl;
+    std::cerr << "n_crit_region " << n_crit_region_ << ", n_crit_point " << n_crit_point_ << std::endl;
     
     // create empty root page
     PointPage *pp = new PointPage();
@@ -185,6 +185,11 @@ struct NDBTree {
     return num_nodes;
   }
 
+  /* prints the subgraph that starts at page p
+   * @return old_num_nodes + num_nodes that are printed
+   * if @param nodes then print the nodes, else print the edges
+   */
+
   size_t print_graph_rest(Page *p, size_t num_nodes, bool nodes) {
     if (p->isRegionPage) {
       RegionPage *rp = dynamic_cast<RegionPage*> (p);
@@ -200,24 +205,36 @@ struct NDBTree {
    * works with the visualizer
    */
   void print_points() {
-    for (auto &&page : pointPages_) {
-      for (auto && point : page->points) {
-        assert(page->points.size() <= n_crit_point_);
-        std::cout << point << " 0" << std::endl;
+    if (DIM == 2) {
+      for (auto &&page : pointPages_) {
+        for (auto && point : page->points) {
+          assert(page->points.size() <= n_crit_point_);
+          std::cout << point << " 0" << std::endl;
+        }
+      }
+    }
+    else if (DIM == 3) {
+      for (auto &&page : pointPages_) {
+        for (auto && point : page->points) {
+          assert(page->points.size() <= n_crit_point_);
+          std::cout << point << std::endl;
+        }
       }
     }
   }
 
-  // prints nodes and edges for the visualizer
+  /* prints nodes and edges for the visualizer
+   * if @a nodes then print nodes, else print the edges
+   * @pre DIM = 2 or 3
+   */
   void print_graph(bool nodes) {
-    if (DIM == 2 || DIM == 3) {
-      size_t num_nodes = 0;
-      num_nodes = print_box(rootBox, num_nodes, nodes);
-      print_graph_rest(root, num_nodes, nodes);
-      if (nodes) {
-        print_points();
-      }
-    } 
+    assert (DIM == 2 || DIM == 3);
+    size_t num_nodes = 0;
+    num_nodes = print_box(rootBox, num_nodes, nodes);
+    print_graph_rest(root, num_nodes, nodes);
+    if (nodes) {
+      print_points();
+    }
   }
   
   private:
