@@ -5,23 +5,34 @@
 #include <string>
 
 
-#define DIM 3
+#define DIM 2
+
+enum {
+  Times,
+  Interesting,
+  Normal,
+  Query,
+  QueryRange
+};
+
+#define MODE Normal
 
 typedef Vec<DIM,double> point_type;
 
 void test_times(int N) {
-  for (int i = 0; i < N; i += 100000) {
+  for (int i = 100000; i < N; i += 100000) {
     std::vector<point_type> points(i);
     for (int k = 0; k < i; ++k)
       points[k] = fmmtl::random<point_type>::get();
 
     clock_t start = clock();
-    NDBTree<DIM> tree(points.begin(), points.end());
+    KDBTree<DIM> tree(points.begin(), points.end());
     clock_t end = clock();
     std::cout << i << ", " << (end - start) / (CLOCKS_PER_SEC/1000) << std::endl;
   }
 }
 
+// Implements a square pattern and some outliers
 void test_interesting(int N, int argc, char **argv) {
   std::vector<point_type> points(N);
 
@@ -35,31 +46,21 @@ void test_interesting(int N, int argc, char **argv) {
     points[k] = p;
   }
   for (int k = 0; k < 100; ++k) {
-   points[N-1-k] = point_type(1.5+k*.01,1.5,1.5);  
+    point_type p;
+    for (int i = 0; i < DIM; ++i) {
+      p[i] = 1.5;
+    }
+    p[0] += k*.01;
+    points[N-1-k] = p;
   }
+  KDBTree<DIM> tree(points.begin(), points.end());
 
-  // std::vector<point_type> points(N);
-
-  // srand(1);
-  // for (int k = 0; k < N-100; ++k) {
-  //   point_type p;
-  //   for (int i = 0; i < DIM; ++i) {
-  //     p[i] = (double) rand() / RAND_MAX;
-  //   }
-  //   points[k] = p;
-  // }
-  // for (int k = 0; k < 100; ++k) {
-  //   points[N-1-k] = point_type(1.5+k*.01,1.5,1.5);  
-  // }
-
-  //   NDBTree<DIM> tree(points.begin(), points.end());
-
-  //   if (argc == 3) {
-  //     if (atoi(argv[2]))
-  //       tree.print_graph(1); // print nodes
-  //     else
-  //       tree.print_graph(0); // print edges
-  //   }
+  if (argc == 3) {
+    if (atoi(argv[2]))
+      tree.print_graph(1); // print nodes
+    else
+      tree.print_graph(0); // print edges
+  }
 }
 
 void test_normal(int N, int argc, char **argv) {
@@ -68,29 +69,24 @@ void test_normal(int N, int argc, char **argv) {
   for (int k = 0; k < N; ++k)
     points[k] = fmmtl::random<point_type>::get();
 
-    NDBTree<DIM> tree(points.begin(), points.end());
-    auto i = 0;
-    for (auto &&p : points) {
-      assert(tree.query(p));
-      ++i;
-    }
-    auto vec = tree.query_range(BoundingBox<DIM>(point_type(.4,.4,.4),point_type(.5,.5,.5)));
-    std::cout << vec.size() << std::endl;
-    if (argc == 3) {
-      if (atoi(argv[2]))
-        tree.print_graph(1); // print nodes
-      else
-        tree.print_graph(0); // print edges
-    }
+  KDBTree<DIM> tree(points.begin(), points.end());
+
+  // print nodes and edges
+  if (argc == 3) {
+    if (atoi(argv[2]))
+      tree.print_graph(1); // print nodes
+    else
+      tree.print_graph(0); // print edges
+  }
 }
 
 void test_query(int N) {
-  for (int i = 4000000; i < 5100000; i += 100000) {
+  for (int i = 100000; i < N; i += 100000) {
     std::vector<point_type> points(i);
     for (int k = 0; k < i; ++k)
       points[k] = fmmtl::random<point_type>::get();
       
-    NDBTree<DIM> tree(points.begin(), points.end());
+    KDBTree<DIM> tree(points.begin(), points.end());
       
     clock_t start = clock();
     for (auto &&p : points) {
@@ -101,6 +97,28 @@ void test_query(int N) {
   }
 }
 
+void test_query_range(int N) {
+  for (int i = 100000; i < N; i += 100000) {
+
+    std::vector<point_type> points(i);
+    for (int k = 0; k < i; ++k)
+      points[k] = fmmtl::random<point_type>::get();
+      
+    KDBTree<DIM> tree(points.begin(), points.end());
+    
+    clock_t start = clock();
+    for (int i = 0; i < 10000; ++i) {
+      point_type min(.1*(i%10),.1*(i%10));
+      point_type max = min;
+      max[0] += 100.0/i;
+      auto vec = tree.query_range(BoundingBox<DIM>(min,max));
+    }
+    clock_t end = clock();
+    std::cout << i << ", " << (double) ((end - start) / (CLOCKS_PER_SEC/1000)) << std::endl;    
+  }
+}
+
+
 int main(int argc, char** argv)
 {
   if (argc < 2) {
@@ -110,8 +128,23 @@ int main(int argc, char** argv)
 
   int N = atoi(argv[1]);
 
-  // test_normal(N, argc, argv);
-  test_query(N);
+  switch(MODE) {
+    case Normal:
+      test_normal(N, argc, argv);
+      break;
+    case Times:
+      test_times(N);
+      break;
+    case Interesting:
+      test_interesting(N, argc, argv);
+      break;
+    case Query:
+      test_query(N);
+      break;
+    case QueryRange:
+      test_query_range(N);
+      break;
+  }
 
   return 0;  
 }
