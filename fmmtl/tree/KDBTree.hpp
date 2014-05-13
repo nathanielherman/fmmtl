@@ -4,10 +4,7 @@
  */
 
 #include <vector>
-
-
 #include <iostream>
-// #include <iomanip>
 
 #include "fmmtl/numeric/Vec.hpp"
 #include "BoundingBox.hpp"
@@ -17,12 +14,10 @@
 //! Class for tree structure
 template <unsigned DIM>
 struct NDBTree {
-
-
   // type declarations
   typedef Vec<DIM,double> point_type;
   typedef BoundingBox<DIM> bounding_box_type;
-
+  
   struct RegionPage;
   struct Page {
     bool isRegionPage;
@@ -243,9 +238,9 @@ struct NDBTree {
   template <typename PointIter>
   void insert_range(PointIter p_first, PointIter p_last) {
     for (auto it = p_first; it != p_last; ++it) {
+      // ensure no duplicates
       if (!insert(*it)) {
-        // inserted duplicate point // TODO: notify user
-        assert(0);
+	continue;
       }
     }
   }
@@ -514,7 +509,39 @@ struct NDBTree {
     return inPointPage(p, page);
   }
 
+  /** Return all points in the given box
+   * @param[in] box The BoundingBox in which to query
+   * @return vector of points in the tree which are within @a box
+   * Use query() to query for the presence of individual points
+   */
+  std::vector<point_type> query_range(const bounding_box_type& box) {
+    std::vector<point_type> pts;
+    _query_range(root, box, pts);
+    return pts;
+  }
+
 private:
+  /** Recursive helper function for query_range */
+  void _query_range(const Page *head, const bounding_box_type& box, std::vector<point_type>& pts) {
+    // reached a leaf
+    if (!head->isRegionPage) {
+      const PointPage *pp = dynamic_cast<const PointPage*>(head);
+      for (auto&& p : pp->points) {
+	if (box.contains(p)) {
+	  pts.push_back(p);
+	}
+      }
+      return;
+    }
+
+    const RegionPage *rp = dynamic_cast<const RegionPage*>(head);
+    for (auto&& region : rp->children) {
+      if (box.intersects(region.box)) {
+        _query_range(region.page, box, pts);
+      }
+    }
+  }
+
   /** Return true iff @a p is in the given PointPage */
   bool inPointPage(point_type p, PointPage *page) {
     for (auto&& point : page->points) {
@@ -576,7 +603,7 @@ private:
   }
   
   Page *root;
-
+  
   bounding_box_type rootBox;
   
   std::vector<PointPage*> pointPages_;

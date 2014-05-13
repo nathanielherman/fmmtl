@@ -5,7 +5,7 @@
 #include <string>
 
 
-#define DIM 2
+#define DIM 3
 
 typedef Vec<DIM,double> point_type;
 
@@ -23,6 +23,20 @@ void test_times(int N) {
 }
 
 void test_interesting(int N, int argc, char **argv) {
+  std::vector<point_type> points(N);
+
+  srand(1);
+  for (int k = 0; k < N-100; ++k) {
+    point_type p;
+    for (int i = 0; i < DIM; ++i) {
+      p[i] = (double) rand() / RAND_MAX;
+      p[i]*=p[i];
+    }
+    points[k] = p;
+  }
+  for (int k = 0; k < 100; ++k) {
+   points[N-1-k] = point_type(1.5+k*.01,1.5,1.5);  
+  }
 
   // std::vector<point_type> points(N);
 
@@ -60,6 +74,8 @@ void test_normal(int N, int argc, char **argv) {
       assert(tree.query(p));
       ++i;
     }
+    auto vec = tree.query_range(BoundingBox<DIM>(point_type(.4,.4,.4),point_type(.5,.5,.5)));
+    std::cout << vec.size() << std::endl;
     if (argc == 3) {
       if (atoi(argv[2]))
         tree.print_graph(1); // print nodes
@@ -96,5 +112,6 @@ int main(int argc, char** argv)
 
   // test_normal(N, argc, argv);
   test_query(N);
+
   return 0;  
 }
