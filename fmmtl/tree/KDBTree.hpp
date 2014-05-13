@@ -1,20 +1,14 @@
 #pragma once
-/** @file NDTree
- * @brief General class representing a {1D,2D,3D,4D}-BTree.
+/** @file KDBTree
+ * @brief General class representing a {2D,3D,4D}-BTree.
  */
 
 #include <vector>
-#include <bitset>
-#include <algorithm>
+
 
 #include <iostream>
-#include <iomanip>
+// #include <iomanip>
 
-#include <boost/iterator/iterator_adaptor.hpp>
-#include <boost/iterator/permutation_iterator.hpp>
-using boost::iterator_adaptor;
-
-#include "fmmtl/util/Logger.hpp"
 #include "fmmtl/numeric/Vec.hpp"
 #include "BoundingBox.hpp"
 
