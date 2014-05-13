@@ -232,10 +232,8 @@ struct NDBTree {
   template <typename PointIter>
   void insert_range(PointIter p_first, PointIter p_last) {
     for (auto it = p_first; it != p_last; ++it) {
-      if (!insert(*it)) {
-        // inserted duplicate point // TODO: notify user
-        assert(0);
-      }
+      // ensure no duplicates
+      assert(insert(*it));
     }
   }
   
