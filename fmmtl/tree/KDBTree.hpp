@@ -493,6 +493,9 @@ struct NDBTree {
   }
 
   /** Return all points in the given box
+   * @param[in] box The BoundingBox in which to query
+   * @return vector of points in the tree which are within @a box
+   * Use query() to query for the presence of individual points
    */
   std::vector<point_type> query_range(const bounding_box_type& box) {
     std::vector<point_type> pts;
@@ -501,6 +504,7 @@ struct NDBTree {
   }
 
 private:
+  /** Recursive helper function for query_range */
   void _query_range(const Page *head, const bounding_box_type& box, std::vector<point_type>& pts) {
     // reached a leaf
     if (!head->isRegionPage) {
