@@ -1,9 +1,9 @@
 KDBTree Implemenation
 =============================
 
-The implementation of the KDBTree is based on this paper http://dl.acm.org/citation.cfm?id=582321 and can be found under ffmtl/tree/KDBTree.hpp
+The implementation of the KDBTree is based on this paper http://dl.acm.org/citation.cfm?id=582321 and can be found under ffmtl/tree/KDBTree.hpp, and the tests are in unit_tests/test_kdbtree.cpp
 
-Our implementation has been tested and works for 2D and 3D points.     
+Our implementation has been tested and works for kD points.
 
 The KDBTree can be instantiated by:
 
